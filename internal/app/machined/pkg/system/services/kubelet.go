@@ -309,6 +309,13 @@ func (k *Kubelet) args(r runtime.Runtime) ([]string, error) {
 		}
 	}
 
+	fg := extraArgs.Get("feature-gates")
+	if fg != "" {
+		fg += ","
+	}
+
+	extraArgs.Set("feature-gates", fg+"DynamicKubeletConfig=true")
+
 	return denyListArgs.Merge(extraArgs).Args(), nil
 }
 
