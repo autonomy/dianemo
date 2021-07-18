@@ -127,7 +127,7 @@ func (p *processRunner) run(eventSink events.Recorder) error {
 	if cgroups.Mode() == cgroups.Unified {
 		cg, err := cgroupsv2.LoadManager("/sys/fs/cgroup", constants.CgroupRuntime)
 		if err != nil {
-			return fmt.Errorf("failed to load cgroup %s", constants.SystemContainerdNamespace)
+			return fmt.Errorf("failed to load cgroup %s", constants.CgroupRuntime)
 		}
 		if err := cg.AddProc(uint64(cmd.Process.Pid)); err != nil {
 			return fmt.Errorf("failed to move process %s to cgroup: %w", p, err)
@@ -135,7 +135,7 @@ func (p *processRunner) run(eventSink events.Recorder) error {
 	} else {
 		cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(constants.CgroupRuntime))
 		if err != nil {
-			return fmt.Errorf("failed to load cgroup %s", constants.SystemContainerdNamespace)
+			return fmt.Errorf("failed to load cgroup %s", constants.CgroupRuntime)
 		}
 		if err := cg.Add(cgroups.Process{
 			Pid: cmd.Process.Pid,
