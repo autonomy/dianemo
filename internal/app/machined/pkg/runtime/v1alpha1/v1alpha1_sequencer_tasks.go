@@ -17,7 +17,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/talos-systems/go-blockdevice/blockdevice"
 	"github.com/talos-systems/go-blockdevice/blockdevice/partition/gpt"
 	"github.com/talos-systems/go-blockdevice/blockdevice/util"
@@ -37,6 +37,8 @@ import (
 	"golang.org/x/sys/unix"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 
+	"github.com/containerd/cgroups"
+	cgroupsv2 "github.com/containerd/cgroups/v2"
 	installer "github.com/talos-systems/talos/cmd/installer/pkg/install"
 	"github.com/talos-systems/talos/internal/app/machined/internal/install"
 	"github.com/talos-systems/talos/internal/app/machined/pkg/runtime"
@@ -133,21 +135,37 @@ func SetupSystemDirectory(seq runtime.Sequence, data interface{}) (runtime.TaskE
 func SetupSystemCgroups(seq runtime.Sequence, data interface{}) (runtime.TaskExecutionFunc, string) {
 	return func(ctx context.Context, logger *log.Logger, r runtime.Runtime) (err error) {
 
-		initPid := []byte(strconv.Itoa(1))
 		groups := []string{
-			"init",
-			"kubelet",
+			constants.CgroupInit,
+			constants.CgroupRuntime,
 		}
 
 		for _, c := range groups {
-			p := path.Join("/sys/fs/cgroup/", c)
-			if err = os.MkdirAll(p, 0o755); err != nil {
-				return fmt.Errorf("failed to create default cgroup: %w", err)
-			}
-		}
+			if cgroups.Mode() == cgroups.Unified {
+				cg, err := cgroupsv2.NewManager("/sys/fs/cgroup", c, &cgroupsv2.Resources{})
+				if err != nil {
+					return fmt.Errorf("failed to create cgroup: %w", err)
+				}
 
-		if err = ioutil.WriteFile("/sys/fs/cgroup/init/cgroup.procs", initPid, os.FileMode(0o644)); err != nil {
-			return fmt.Errorf("failed to move init process to cgroup: %w", err)
+				if c == constants.CgroupInit {
+					if err := cg.AddProc(uint64(os.Getpid())); err != nil {
+						return fmt.Errorf("failed to move init process to cgroup: %w", err)
+					}
+				}
+			} else {
+				cg, err := cgroups.New(cgroups.V1, cgroups.StaticPath(c), &specs.LinuxResources{})
+				if err != nil {
+					return fmt.Errorf("failed to create cgroup: %w", err)
+				}
+
+				if c == constants.CgroupInit {
+					if err := cg.Add(cgroups.Process{
+						Pid: os.Getpid(),
+					}); err != nil {
+						return fmt.Errorf("failed to move init process to cgroup: %w", err)
+					}
+				}
+			}
 		}
 
 		return nil

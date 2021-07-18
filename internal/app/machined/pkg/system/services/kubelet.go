@@ -273,8 +273,8 @@ func newKubeletConfiguration(clusterDNS []string, dnsDomain string) *kubeletconf
 		SerializeImagePulls: &f,
 		FailSwapOn:          &f,
 		CgroupRoot:          "/",
-		SystemCgroups:       "/system",
-		KubeletCgroups:      "/kubelet",
+		SystemCgroups:       constants.CgroupSystem,
+		KubeletCgroups:      constants.CgroupSystem + "/kubelet",
 	}
 }
 
