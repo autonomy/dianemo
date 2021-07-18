@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/cgroups"
+	cgroupsv2 "github.com/containerd/cgroups/v2"
 	"github.com/talos-systems/go-cmd/pkg/cmd/proc/reaper"
 
 	"github.com/talos-systems/talos/internal/app/machined/pkg/system/events"
@@ -120,6 +122,26 @@ func (p *processRunner) run(eventSink events.Recorder) error {
 
 	if err = cmd.Start(); err != nil {
 		return fmt.Errorf("error starting process: %w", err)
+	}
+
+	if cgroups.Mode() == cgroups.Unified {
+		cg, err := cgroupsv2.LoadManager("/sys/fs/cgroup", constants.CgroupRuntime)
+		if err != nil {
+			return fmt.Errorf("failed to load cgroup %s", constants.CgroupRuntime)
+		}
+		if err := cg.AddProc(uint64(cmd.Process.Pid)); err != nil {
+			return fmt.Errorf("failed to move process %s to cgroup: %w", p, err)
+		}
+	} else {
+		cg, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(constants.CgroupRuntime))
+		if err != nil {
+			return fmt.Errorf("failed to load cgroup %s", constants.CgroupRuntime)
+		}
+		if err := cg.Add(cgroups.Process{
+			Pid: cmd.Process.Pid,
+		}); err != nil {
+			return fmt.Errorf("failed to move process %s to cgroup: %w", p, err)
+		}
 	}
 
 	eventSink(events.StateRunning, "Process %s started with PID %d", p, cmd.Process.Pid)
